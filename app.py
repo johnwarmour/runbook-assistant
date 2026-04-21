@@ -1,6 +1,9 @@
+import functools
+import http.server
 import json
 import os
 import tempfile
+import threading
 from pathlib import Path
 from typing import Optional
 
@@ -16,6 +19,7 @@ load_dotenv()
 
 INDEX_DIR = Path("./runbook_index")
 MANIFEST_PATH = INDEX_DIR / "manifest.json"
+STATIC_DIR = Path("./static/runbooks")
 EMBED_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
 TOP_K = 4
 
@@ -28,6 +32,26 @@ Always cite which runbook(s) you are drawing from."""
 
 
 # ── Index helpers ─────────────────────────────────────────────────────────────
+
+class _ReuseAddrServer(http.server.HTTPServer):
+    allow_reuse_address = True
+
+
+@st.cache_resource(show_spinner=False)
+def start_file_server() -> str:
+    STATIC_DIR.mkdir(parents=True, exist_ok=True)
+    handler = functools.partial(
+        http.server.SimpleHTTPRequestHandler,
+        directory=str(STATIC_DIR),
+    )
+    server = _ReuseAddrServer(("", 0), handler)  # port 0 = OS picks a free port
+    port = server.server_address[1]
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    return f"http://localhost:{port}"
+
+BASE_URL = start_file_server()
+
 
 @st.cache_resource(show_spinner="Loading embedding model...")
 def get_embeddings():
@@ -60,12 +84,16 @@ def save_manifest(files: list[str]):
 
 def index_file(uploaded_file) -> tuple[bool, str]:
     suffix = Path(uploaded_file.name).suffix.lower()
+    file_bytes = uploaded_file.getvalue()
 
     with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
-        tmp.write(uploaded_file.getvalue())
+        tmp.write(file_bytes)
         tmp_path = tmp.name
 
     try:
+        STATIC_DIR.mkdir(parents=True, exist_ok=True)
+        (STATIC_DIR / uploaded_file.name).write_bytes(file_bytes)
+
         if suffix == ".pdf":
             loader = PyMuPDFLoader(tmp_path)
         else:
@@ -189,6 +217,8 @@ with st.sidebar:
     if st.button("Clear Index", type="secondary"):
         for f in INDEX_DIR.glob("*"):
             f.unlink()
+        for f in STATIC_DIR.glob("*"):
+            f.unlink()
         st.session_state.pop("messages", None)
         st.toast("Index cleared.", icon="✅")
         st.rerun()
@@ -203,7 +233,9 @@ for msg in st.session_state.messages:
         if msg.get("sources"):
             with st.expander("Sources"):
                 for src in msg["sources"]:
-                    st.caption(f"**{src['source']}**")
+                    col1, col2 = st.columns([8, 2])
+                    col1.caption(f"**{src['source']}**")
+                    col2.link_button("Open ↗", f"{BASE_URL}/{src['source']}", use_container_width=True)
                     st.markdown(src["content"])
                     st.divider()
 
@@ -235,7 +267,9 @@ if query := st.chat_input("Ask about a runbook or describe an incident symptom..
         if sources:
             with st.expander("Sources"):
                 for src in sources:
-                    st.caption(f"**{src['source']}**")
+                    col1, col2 = st.columns([8, 2])
+                    col1.caption(f"**{src['source']}**")
+                    col2.link_button("Open ↗", f"{BASE_URL}/{src['source']}", use_container_width=True)
                     st.markdown(src["content"])
                     st.divider()
 

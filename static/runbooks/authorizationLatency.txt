@@ -1,0 +1,12 @@
+Trigger: Authorization latency exceeds 3 seconds for more than 2 minutes, connection pool utilization alert fires.
+Verification steps:
+	•	Check the monitoring dashboard to confirm connection pool utilization is above 90%
+	•	Confirm no concurrent deployments are in progress that might explain the spike
+	•	Check whether the issue is isolated to one region or global
+Remediation steps:
+	•	Restart the connection pool manager on the affected nodes in this order: secondary first, then primary
+	•	Wait 90 seconds and check if latency returns to baseline
+	•	If not, escalate to the database on-call engineer
+	•	If yes, monitor for 10 minutes before declaring resolution
+Escalation path: If not resolved within 15 minutes, page the payments infrastructure lead and open a P1 bridge call.
+Comms: Notify the incident manager to send a stakeholder update noting degraded authorization performance and active remediation.

@@ -2,6 +2,7 @@ import json
 import os
 import tempfile
 from pathlib import Path
+from typing import Optional
 
 import streamlit as st
 from anthropic import Anthropic
@@ -33,7 +34,7 @@ def get_embeddings():
     return HuggingFaceEmbeddings(model_name=EMBED_MODEL)
 
 
-def load_index() -> FAISS | None:
+def load_index() -> Optional[FAISS]:
     if (INDEX_DIR / "index.faiss").exists():
         return FAISS.load_local(
             str(INDEX_DIR), get_embeddings(), allow_dangerous_deserialization=True

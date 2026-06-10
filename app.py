@@ -66,6 +66,11 @@ def load_index() -> Optional[FAISS]:
     return None
 
 
+@st.cache_resource(show_spinner=False)
+def get_index(manifest_key: str) -> Optional[FAISS]:
+    return load_index()
+
+
 def save_index(index: FAISS):
     INDEX_DIR.mkdir(exist_ok=True)
     index.save_local(str(INDEX_DIR))
@@ -133,7 +138,7 @@ def index_file(uploaded_file) -> tuple[bool, str]:
 
 
 def retrieve(query: str, k: int = TOP_K) -> list:
-    index = load_index()
+    index = get_index("|".join(load_manifest()))
     if not index:
         return []
     return index.similarity_search(query, k=k)
